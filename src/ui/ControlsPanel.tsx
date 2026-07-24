@@ -79,6 +79,9 @@ export function ControlsPanel() {
         />
         Mostrar etiquetas
       </label>
+      <p className="muted" style={{ marginTop: '-0.15rem', marginBottom: '0.45rem' }}>
+        Si están apagadas, al pasar el cursor sobre una pieza aparece su nombre.
+      </p>
       <label className="check">
         <input
           type="checkbox"

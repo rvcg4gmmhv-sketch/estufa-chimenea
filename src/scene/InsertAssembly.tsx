@@ -15,8 +15,10 @@ interface Props {
   showEnvelopeEdges: boolean
   showEnvelopeLabels: boolean
   selectedId: string | null
+  hoveredId: string | null
   showLabels: boolean
   onSelect: (id: string) => void
+  onHover: (id: string | null) => void
   clippingPlanes?: THREE.Plane[]
 }
 
@@ -53,8 +55,10 @@ function LayerMeshes({
   showEnvelopeEdges,
   showEnvelopeLabels,
   selected,
+  hovered,
   showLabels,
   onSelect,
+  onHover,
   clippingPlanes,
 }: {
   layer: LayerDef
@@ -66,8 +70,10 @@ function LayerMeshes({
   showEnvelopeEdges: boolean
   showEnvelopeLabels: boolean
   selected: boolean
+  hovered: boolean
   showLabels: boolean
   onSelect: () => void
+  onHover: (v: boolean) => void
   clippingPlanes?: THREE.Plane[]
 }) {
   const parts = useMemo(() => buildLayerPart(layer, model), [layer, model])
@@ -93,6 +99,22 @@ function LayerMeshes({
         ? '3 · Cámara de combustión'
         : null
 
+  const showPartLabel =
+    (showLabels || hovered) && !(showEnvelopeLabels && isEnvelope)
+
+  const pointerProps = {
+    onPointerOver: (e: { stopPropagation: () => void }) => {
+      e.stopPropagation()
+      onHover(true)
+      document.body.style.cursor = 'pointer'
+    },
+    onPointerOut: (e: { stopPropagation: () => void }) => {
+      e.stopPropagation()
+      onHover(false)
+      document.body.style.cursor = 'auto'
+    },
+  }
+
   return (
     <group position={offset}>
       {parts.map((part, i) => {
@@ -115,7 +137,7 @@ function LayerMeshes({
         const mat = createMaterial(matKey, {
           opacity: opacity ?? 1,
           transparent: (opacity !== undefined && opacity < 0.99) || matKey === 'glass',
-          selected,
+          selected: selected || hovered,
           envelope: isEnvelope ? (layer.id as 'shell' | 'chamber') : undefined,
         })
         if (clippingPlanes?.length) {
@@ -133,6 +155,7 @@ function LayerMeshes({
               e.stopPropagation()
               onSelect()
             }}
+            {...pointerProps}
           />
         )
       })}
@@ -162,11 +185,12 @@ function LayerMeshes({
               : new THREE.Vector3(0, layer.id === 'shell' ? 38 : 22, 5)
           }
           center
+          style={{ pointerEvents: 'none' }}
         >
           <span className={`envelope-label ${layer.id}`}>{envelopeLabel}</span>
         </Html>
       )}
-      {!showEnvelopeLabels && showLabels && parts[0] && (
+      {showPartLabel && parts[0] && (
         <Html
           position={
             parts[0].position.lengthSq() > 1
@@ -174,8 +198,11 @@ function LayerMeshes({
               : new THREE.Vector3(0, 25, 5)
           }
           center
+          style={{ pointerEvents: 'none' }}
         >
-          <span className="part-label">{layer.name}</span>
+          <span className={`part-label${hovered && !showLabels ? ' hover' : ''}`}>
+            {layer.name}
+          </span>
         </Html>
       )}
     </group>
@@ -191,8 +218,10 @@ export function InsertAssembly({
   showEnvelopeEdges,
   showEnvelopeLabels,
   selectedId,
+  hoveredId,
   showLabels,
   onSelect,
+  onHover,
   clippingPlanes,
 }: Props) {
   return (
@@ -209,8 +238,10 @@ export function InsertAssembly({
           showEnvelopeEdges={showEnvelopeEdges}
           showEnvelopeLabels={showEnvelopeLabels}
           selected={selectedId === layer.id}
+          hovered={hoveredId === layer.id}
           showLabels={showLabels}
           onSelect={() => onSelect(layer.id)}
+          onHover={(v) => onHover(v ? layer.id : null)}
           clippingPlanes={clippingPlanes}
         />
       ))}
@@ -218,8 +249,10 @@ export function InsertAssembly({
         model={model}
         explode={explode}
         selected={selectedId === 'door'}
+        hovered={hoveredId === 'door'}
         showLabels={showLabels}
         onSelect={() => onSelect('door')}
+        onHover={(v) => onHover(v ? 'door' : null)}
         clippingPlanes={clippingPlanes}
       />
     </group>

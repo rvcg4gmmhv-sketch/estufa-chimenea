@@ -9,8 +9,10 @@ interface Props {
   elements: DesignElement[]
   explode: number
   selectedId: string | null
+  hoveredId: string | null
   showLabels: boolean
   onSelect: (id: string) => void
+  onHover: (id: string | null) => void
   clippingPlanes?: THREE.Plane[]
 }
 
@@ -18,28 +20,37 @@ function ElementMesh({
   el,
   explode,
   selected,
+  hovered,
   showLabels,
   onSelect,
+  onHover,
   clippingPlanes,
 }: {
   el: DesignElement
   explode: number
   selected: boolean
+  hovered: boolean
   showLabels: boolean
   onSelect: () => void
+  onHover: (v: boolean) => void
   clippingPlanes?: THREE.Plane[]
 }) {
   const geo = useMemo(() => buildElementGeometry(el), [el])
   const mat = useMemo(() => {
-    const m = createMaterial(el.materialKey, { selected, opacity: selected ? 1 : 0.9 })
+    const m = createMaterial(el.materialKey, {
+      selected: selected || hovered,
+      opacity: selected || hovered ? 1 : 0.9,
+    })
     if (clippingPlanes?.length) {
       m.clippingPlanes = clippingPlanes
       m.clipShadows = true
     }
     return m
-  }, [el.materialKey, selected, clippingPlanes])
+  }, [el.materialKey, selected, hovered, clippingPlanes])
 
   if (!el.visible) return null
+
+  const showPartLabel = showLabels || hovered
 
   return (
     <group
@@ -57,11 +68,27 @@ function ElementMesh({
         e.stopPropagation()
         onSelect()
       }}
+      onPointerOver={(e) => {
+        e.stopPropagation()
+        onHover(true)
+        document.body.style.cursor = 'pointer'
+      }}
+      onPointerOut={(e) => {
+        e.stopPropagation()
+        onHover(false)
+        document.body.style.cursor = 'auto'
+      }}
     >
       <mesh geometry={geo} material={mat} />
-      {showLabels && (
-        <Html position={[0, el.scale.y / 2 + 3, 0]} center>
-          <span className="part-label">{el.name}</span>
+      {showPartLabel && (
+        <Html
+          position={[0, el.scale.y / 2 + 3, 0]}
+          center
+          style={{ pointerEvents: 'none' }}
+        >
+          <span className={`part-label${hovered && !showLabels ? ' hover' : ''}`}>
+            {el.name}
+          </span>
         </Html>
       )}
     </group>
@@ -72,8 +99,10 @@ export function ElementAssembly({
   elements,
   explode,
   selectedId,
+  hoveredId,
   showLabels,
   onSelect,
+  onHover,
   clippingPlanes,
 }: Props) {
   return (
@@ -84,8 +113,10 @@ export function ElementAssembly({
           el={el}
           explode={explode}
           selected={selectedId === el.id}
+          hovered={hoveredId === el.id}
           showLabels={showLabels}
           onSelect={() => onSelect(el.id)}
+          onHover={(v) => onHover(v ? el.id : null)}
           clippingPlanes={clippingPlanes}
         />
       ))}

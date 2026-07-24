@@ -22,6 +22,7 @@ interface ViewerStore extends ViewerUiState {
   past: DesignModel[]
   future: DesignModel[]
   snapshots: ModelSnapshot[]
+  hoveredId: string | null
   cameraView: 'front' | 'side' | 'top' | 'iso' | 'reset' | null
   cameraNonce: number
   cameraAction:
@@ -44,6 +45,7 @@ interface ViewerStore extends ViewerUiState {
   setLayerVisible: (id: string, visible: boolean) => void
   setElementVisible: (id: string, visible: boolean) => void
   select: (id: string | null) => void
+  setHovered: (id: string | null) => void
   setFireplaceVisibility: (v: FireplaceVisibility) => void
   setShowDimensions: (v: boolean) => void
   setShowLabels: (v: boolean) => void
@@ -163,6 +165,7 @@ const initialUi: ViewerUiState = {
 
 export const useViewerStore = create<ViewerStore>((set, get) => ({
   ...initialUi,
+  hoveredId: null,
   model: structuredClone(DEFAULT_MODEL),
   past: [],
   future: [],
@@ -236,6 +239,7 @@ export const useViewerStore = create<ViewerStore>((set, get) => ({
   },
 
   select: (id) => set({ selectedId: id }),
+  setHovered: (hoveredId) => set({ hoveredId }),
   setFireplaceVisibility: (fireplaceVisibility) => set({ fireplaceVisibility }),
   setShowDimensions: (showDimensions) => set({ showDimensions }),
   setShowLabels: (showLabels) => set({ showLabels }),

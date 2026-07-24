@@ -15,11 +15,14 @@ interface Props {
   visibility: FireplaceVisibility
   showDimensions: boolean
   selected: boolean
+  hovered: boolean
+  showLabels: boolean
   onSelect: () => void
+  onHover: (v: boolean) => void
   explodeOffset: THREE.Vector3
   opacity: number
   showEdges: boolean
-  showLabel: boolean
+  showEnvelopeLabel: boolean
 }
 
 export function Fireplace({
@@ -27,11 +30,14 @@ export function Fireplace({
   visibility,
   showDimensions,
   selected,
+  hovered,
+  showLabels,
   onSelect,
+  onHover,
   explodeOffset,
   opacity,
   showEdges,
-  showLabel,
+  showEnvelopeLabel,
 }: Props) {
   const cavity = useMemo(
     () => buildFireplaceCavityGeometry(fireplace),
@@ -52,7 +58,7 @@ export function Fireplace({
   const mat = createMaterial('masonry', {
     opacity: matOpacity,
     transparent: true,
-    selected,
+    selected: selected || hovered,
     envelope: 'masonry',
   })
   const stackMat = createMaterial('duct', {
@@ -60,10 +66,31 @@ export function Fireplace({
     transparent: true,
   })
 
+  const showPartLabel = (showLabels || hovered) && !showEnvelopeLabel
+
+  const pointerProps = {
+    onPointerOver: (e: { stopPropagation: () => void }) => {
+      e.stopPropagation()
+      onHover(true)
+      document.body.style.cursor = 'pointer'
+    },
+    onPointerOut: (e: { stopPropagation: () => void }) => {
+      e.stopPropagation()
+      onHover(false)
+      document.body.style.cursor = 'auto'
+    },
+  }
+
   return (
-    <group position={explodeOffset} onClick={(e) => { e.stopPropagation(); onSelect() }}>
-      <mesh geometry={cavity} material={mat} />
-      <mesh geometry={stackGeo} material={stackMat} position={stackPos} />
+    <group
+      position={explodeOffset}
+      onClick={(e) => {
+        e.stopPropagation()
+        onSelect()
+      }}
+    >
+      <mesh geometry={cavity} material={mat} {...pointerProps} />
+      <mesh geometry={stackGeo} material={stackMat} position={stackPos} {...pointerProps} />
       {(ghost || showEdges) && (
         <lineSegments geometry={edges}>
           <lineBasicMaterial
@@ -74,9 +101,24 @@ export function Fireplace({
           />
         </lineSegments>
       )}
-      {showLabel && (
-        <Html position={[fireplace.frontWidth / 2 + 8, fireplace.frontHeight * 0.55, 8]} center>
+      {showEnvelopeLabel && (
+        <Html
+          position={[fireplace.frontWidth / 2 + 8, fireplace.frontHeight * 0.55, 8]}
+          center
+          style={{ pointerEvents: 'none' }}
+        >
           <span className="envelope-label masonry">1 · Cavidad chimenea</span>
+        </Html>
+      )}
+      {showPartLabel && (
+        <Html
+          position={[fireplace.frontWidth / 2 + 8, fireplace.frontHeight * 0.55, 8]}
+          center
+          style={{ pointerEvents: 'none' }}
+        >
+          <span className={`part-label${hovered && !showLabels ? ' hover' : ''}`}>
+            Albañilería y refractarios existentes
+          </span>
         </Html>
       )}
       <DimensionOverlays fireplace={fireplace} visible={showDimensions} />

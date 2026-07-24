@@ -13,15 +13,19 @@ export function DoorAssembly({
   model,
   explode,
   selected,
+  hovered,
   showLabels,
   onSelect,
+  onHover,
   clippingPlanes,
 }: {
   model: DesignModel
   explode: number
   selected: boolean
+  hovered: boolean
   showLabels: boolean
   onSelect: () => void
+  onHover: (v: boolean) => void
   clippingPlanes?: THREE.Plane[]
 }) {
   const doorOpen = useViewerStore((s) => s.doorOpen)
@@ -48,6 +52,7 @@ export function DoorAssembly({
   )
 
   const hingeWorld = new THREE.Vector3(fl.door.hingeX, (fl.door.yBottom + fl.door.yTop) / 2, fl.door.zLeaf)
+  const showPartLabel = showLabels || hovered
 
   return (
     <group position={offset}>
@@ -57,7 +62,7 @@ export function DoorAssembly({
             {parts.map((part, i) => {
               const key = part.materialOverride === 'glass' ? 'glass' : 'steel'
               const mat = createMaterial(key, {
-                selected,
+                selected: selected || hovered,
                 opacity: part.materialOverride === 'seal' ? 0.45 : undefined,
                 transparent: part.materialOverride === 'seal' || key === 'glass',
               })
@@ -81,15 +86,31 @@ export function DoorAssembly({
                     e.stopPropagation()
                     onSelect()
                   }}
+                  onPointerOver={(e) => {
+                    e.stopPropagation()
+                    onHover(true)
+                    document.body.style.cursor = 'pointer'
+                  }}
+                  onPointerOut={(e) => {
+                    e.stopPropagation()
+                    onHover(false)
+                    document.body.style.cursor = 'auto'
+                  }}
                 />
               )
             })}
           </group>
         </group>
       </group>
-      {showLabels && (
-        <Html position={[0, fl.door.yTop + 4, fl.door.zLeaf]} center>
-          <span className="part-label">Puerta y vidrio</span>
+      {showPartLabel && (
+        <Html
+          position={[0, fl.door.yTop + 4, fl.door.zLeaf]}
+          center
+          style={{ pointerEvents: 'none' }}
+        >
+          <span className={`part-label${hovered && !showLabels ? ' hover' : ''}`}>
+            Puerta y vidrio
+          </span>
         </Html>
       )}
     </group>

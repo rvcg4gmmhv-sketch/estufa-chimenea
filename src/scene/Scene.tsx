@@ -25,10 +25,12 @@ export function Scene() {
   const showEnvelopeLabels = useViewerStore((s) => s.showEnvelopeLabels)
   const explode = useViewerStore((s) => s.explode)
   const selectedId = useViewerStore((s) => s.selectedId)
+  const hoveredId = useViewerStore((s) => s.hoveredId)
   const clipEnabled = useViewerStore((s) => s.clipEnabled)
   const clipAxis = useViewerStore((s) => s.clipAxis)
   const clipPosition = useViewerStore((s) => s.clipPosition)
   const select = useViewerStore((s) => s.select)
+  const setHovered = useViewerStore((s) => s.setHovered)
   const theme = useViewerStore((s) => s.theme)
   const { gl } = useThree()
 
@@ -64,18 +66,27 @@ export function Scene() {
       <directionalLight position={[-60, 40, 40]} intensity={0.35} />
       <CameraRig />
       <SceneAxes />
-      <group onClick={() => select(null)}>
+      <group
+        onClick={() => {
+          select(null)
+          setHovered(null)
+        }}
+        onPointerMissed={() => setHovered(null)}
+      >
         {masonry?.visible !== false && (
           <Fireplace
             fireplace={model.fireplace}
             visibility={fireplaceVisibility}
             showDimensions={showDimensions}
             selected={selectedId === 'masonry'}
+            hovered={hoveredId === 'masonry'}
+            showLabels={showLabels}
             onSelect={() => select('masonry')}
+            onHover={(v) => setHovered(v ? 'masonry' : null)}
             explodeOffset={masonryExplode}
             opacity={masonryOpacity}
             showEdges={showEnvelopeEdges}
-            showLabel={showEnvelopeLabels}
+            showEnvelopeLabel={showEnvelopeLabels}
           />
         )}
         <InsertAssembly
@@ -87,16 +98,20 @@ export function Scene() {
           showEnvelopeEdges={showEnvelopeEdges}
           showEnvelopeLabels={showEnvelopeLabels}
           selectedId={selectedId}
+          hoveredId={hoveredId}
           showLabels={showLabels}
           onSelect={select}
+          onHover={setHovered}
           clippingPlanes={clippingPlanes}
         />
         <ElementAssembly
           elements={model.elements}
           explode={explode}
           selectedId={selectedId}
+          hoveredId={hoveredId}
           showLabels={showLabels}
           onSelect={select}
+          onHover={setHovered}
           clippingPlanes={clippingPlanes}
         />
         {showFlows && (

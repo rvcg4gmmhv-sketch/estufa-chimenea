@@ -484,6 +484,12 @@ button:disabled {
   user-select: none;
 }
 
+.part-label.hover {
+  border-color: color-mix(in srgb, #3d7a8c 55%, var(--panel-border));
+  box-shadow: 0 1px 6px color-mix(in srgb, #000 25%, transparent);
+  font-weight: 600;
+}
+
 .envelope-label {
   font-weight: 600;
   padding: 3px 8px;
