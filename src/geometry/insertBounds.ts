@@ -100,8 +100,8 @@ export function chamferedSideProfile(
 }
 
 /**
- * Extruye un perfil ZY a lo ancho X (centrado), con ancho medio aproximado.
- * El ancho varía poco: usamos el ancho en el centro de profundidad (esquemático).
+ * Extruye un perfil ZY a lo ancho X (centrado), con ancho constante.
+ * Preferir {@link loftZyProfileTapered} para carcasa/cámara dentro de la planta trapezoidal.
  */
 export function extrudeZyProfile(
   profile: THREE.Vector2[],
@@ -126,15 +126,140 @@ export function extrudeZyProfile(
   return geo
 }
 
-/** Inset y ancho de la cámara (compartido con canales secundarios). */
+/** Y mín/máx del polígono ZY (x=z, y=y) en una estación Z. */
+export function profileYExtentAtZ(
+  profile: THREE.Vector2[],
+  z: number,
+): { yMin: number; yMax: number } | null {
+  const ys: number[] = []
+  const n = profile.length
+  for (let i = 0; i < n; i++) {
+    const a = profile[i]
+    const b = profile[(i + 1) % n]
+    const dz = b.x - a.x
+    if (Math.abs(dz) < 1e-9) {
+      if (Math.abs(a.x - z) < 1e-6) {
+        ys.push(a.y, b.y)
+      }
+      continue
+    }
+    const t = (z - a.x) / dz
+    if (t < -1e-6 || t > 1 + 1e-6) continue
+    ys.push(a.y + (b.y - a.y) * THREE.MathUtils.clamp(t, 0, 1))
+  }
+  if (ys.length < 2) return null
+  return { yMin: Math.min(...ys), yMax: Math.max(...ys) }
+}
+
+/** Inset y factores de ancho (compartidos con builders / canales). */
 export const CHAMBER_INSET = 5
 export const CHAMBER_WIDTH_FACTOR = 0.72
 export const SECONDARY_CHANNEL_THICKNESS = 2.8
 
+/** Ancho de pieza a lo largo de Z: planta del inserto menos inset lateral extra. */
+export function pieceWidthAtZ(
+  fp: FireplaceDimensions,
+  fit: InsertFit,
+  z: number,
+  sideInset = 0,
+): number {
+  return Math.max(8, widthAtZ(fp, fit, z) - sideInset * 2)
+}
+
+export function chamberWidthAtZ(
+  fp: FireplaceDimensions,
+  fit: InsertFit,
+  z: number,
+): number {
+  return Math.max(16, widthAtZ(fp, fit, z) * CHAMBER_WIDTH_FACTOR)
+}
+
 export function chamberWidth(fp: FireplaceDimensions, fit: InsertFit): number {
   const midZ = fit.frontSetback + (fp.depth - fit.frontSetback - fit.rearClearance) * 0.45
-  const midW = widthAtZ(fp, fit, midZ)
-  return Math.max(16, midW * CHAMBER_WIDTH_FACTOR)
+  return chamberWidthAtZ(fp, fit, midZ)
+}
+
+/**
+ * Sólido con el mismo perfil ZY (rebaje) y ancho que sigue la planta trapezoidal.
+ * widthAtZFn(z) = ancho total en X; centerXAtZFn opcional (default 0).
+ */
+export function loftZyProfileTapered(
+  profile: THREE.Vector2[],
+  widthAtZFn: (z: number) => number,
+  stations = 12,
+  centerXAtZFn: (z: number) => number = () => 0,
+): THREE.BufferGeometry {
+  const zMin = Math.min(...profile.map((p) => p.x))
+  const zMax = Math.max(...profile.map((p) => p.x))
+
+  type Ring = { z: number; yMin: number; yMax: number; hw: number; cx: number }
+  const rings: Ring[] = []
+
+  const pushRing = (z: number) => {
+    const ext = profileYExtentAtZ(profile, z)
+    if (!ext || ext.yMax - ext.yMin < 0.5) return
+    if (rings.some((r) => Math.abs(r.z - z) < 0.05)) return
+    const w = Math.max(4, widthAtZFn(z))
+    rings.push({
+      z,
+      yMin: ext.yMin,
+      yMax: ext.yMax,
+      hw: w / 2,
+      cx: centerXAtZFn(z),
+    })
+  }
+
+  for (let i = 0; i <= stations; i++) {
+    pushRing(THREE.MathUtils.lerp(zMin, zMax, i / stations))
+  }
+  for (const p of profile) pushRing(p.x)
+  rings.sort((a, b) => a.z - b.z)
+
+  if (rings.length < 2) {
+    return extrudeZyProfile(profile, Math.max(4, widthAtZFn((zMin + zMax) / 2)))
+  }
+
+  const positions: number[] = []
+  const indices: number[] = []
+
+  const pushV = (x: number, y: number, z: number) => {
+    positions.push(x, y, z)
+    return positions.length / 3 - 1
+  }
+
+  const ringIdx: number[][] = []
+  for (const r of rings) {
+    ringIdx.push([
+      pushV(r.cx - r.hw, r.yMin, r.z),
+      pushV(r.cx + r.hw, r.yMin, r.z),
+      pushV(r.cx + r.hw, r.yMax, r.z),
+      pushV(r.cx - r.hw, r.yMax, r.z),
+    ])
+  }
+
+  const quad = (a: number, b: number, c: number, d: number) => {
+    indices.push(a, b, c, a, c, d)
+  }
+
+  for (let i = 0; i < ringIdx.length - 1; i++) {
+    const A = ringIdx[i]
+    const B = ringIdx[i + 1]
+    quad(A[0], B[0], B[1], A[1])
+    quad(A[1], B[1], B[2], A[2])
+    quad(A[2], B[2], B[3], A[3])
+    quad(A[3], B[3], B[0], A[0])
+  }
+
+  const F = ringIdx[0]
+  const R = ringIdx[ringIdx.length - 1]
+  quad(F[0], F[1], F[2], F[3])
+  quad(R[1], R[0], R[3], R[2])
+
+  const geo = new THREE.BufferGeometry()
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+  geo.setIndex(indices)
+  geo.computeVertexNormals()
+  return geo
 }
 
 export interface SecondaryChannelLayout {

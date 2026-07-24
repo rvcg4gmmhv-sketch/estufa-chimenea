@@ -5,9 +5,11 @@ import {
   CHAMBER_INSET,
   chamferedSideProfile,
   chamberWidth,
-  extrudeZyProfile,
+  chamberWidthAtZ,
   insertBounds,
   insertRoofY,
+  loftZyProfileTapered,
+  pieceWidthAtZ,
   secondaryChannelLayout,
   widthAtZ,
 } from './insertBounds'
@@ -72,14 +74,18 @@ export function buildLayerPart(layer: LayerDef, model: DesignModel): BuiltPart[]
     }
     case 'shell': {
       const profile = chamferedSideProfile(fp, fit, 0)
-      const width = Math.max(20, midW + 1)
-      return [{ geometry: extrudeZyProfile(profile, width), position: new THREE.Vector3(0, 0, 0) }]
+      return [
+        {
+          geometry: loftZyProfileTapered(profile, (z) => pieceWidthAtZ(fp, fit, z, 0)),
+          position: new THREE.Vector3(0, 0, 0),
+        },
+      ]
     }
     case 'chamber': {
       const profile = chamferedSideProfile(fp, fit, CHAMBER_INSET)
       return [
         {
-          geometry: extrudeZyProfile(profile, chamberWidth(fp, fit)),
+          geometry: loftZyProfileTapered(profile, (z) => chamberWidthAtZ(fp, fit, z)),
           position: new THREE.Vector3(0, 0, 0),
         },
       ]
@@ -88,7 +94,10 @@ export function buildLayerPart(layer: LayerDef, model: DesignModel): BuiltPart[]
       const profile = chamferedSideProfile(fp, fit, 7)
       return [
         {
-          geometry: extrudeZyProfile(profile, Math.max(14, midW * 0.66)),
+          geometry: loftZyProfileTapered(
+            profile,
+            (z) => Math.max(12, chamberWidthAtZ(fp, fit, z) * 0.9),
+          ),
           position: new THREE.Vector3(0, 0, 0),
         },
       ]
@@ -269,9 +278,26 @@ export function buildLayerPart(layer: LayerDef, model: DesignModel): BuiltPart[]
     }
     case 'secondary': {
       const layout = secondaryChannelLayout(fp, fit)
+      const t = layout.thickness
       return [
-        { geometry: extrudeZyProfile(layout.profile, layout.thickness), position: new THREE.Vector3(layout.leftX, 0, 0) },
-        { geometry: extrudeZyProfile(layout.profile, layout.thickness), position: new THREE.Vector3(layout.rightX, 0, 0) },
+        {
+          geometry: loftZyProfileTapered(
+            layout.profile,
+            () => t,
+            12,
+            (z) => -(chamberWidthAtZ(fp, fit, z) / 2 + t / 2),
+          ),
+          position: new THREE.Vector3(0, 0, 0),
+        },
+        {
+          geometry: loftZyProfileTapered(
+            layout.profile,
+            () => t,
+            12,
+            (z) => chamberWidthAtZ(fp, fit, z) / 2 + t / 2,
+          ),
+          position: new THREE.Vector3(0, 0, 0),
+        },
       ]
     }
     case 'secDistributor': {
@@ -319,7 +345,10 @@ export function buildLayerPart(layer: LayerDef, model: DesignModel): BuiltPart[]
       ]
       return [
         {
-          geometry: extrudeZyProfile(profile, Math.max(12, midW * 0.5)),
+          geometry: loftZyProfileTapered(
+            profile,
+            (z) => Math.max(10, widthAtZ(fp, fit, z) * 0.48),
+          ),
           position: new THREE.Vector3(0, 0, 0),
         },
       ]
