@@ -107,6 +107,7 @@ export interface InsertFit {
 export type ReviewPresetId =
   | 'fit'
   | 'layersDidactic'
+  | 'masonryAsShell'
   | 'frontClean'
   | 'frontCut'
   | 'sideCut'
