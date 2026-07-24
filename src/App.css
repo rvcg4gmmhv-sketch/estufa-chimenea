@@ -354,6 +354,37 @@ button:disabled {
   max-width: min(920px, 96vw);
 }
 
+.envelope-bar-title {
+  margin-top: 0.35rem;
+}
+
+.envelope-toggles {
+  margin-top: 0.15rem;
+}
+
+.envelope-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 6px;
+  border: 1px solid var(--panel-border);
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+  cursor: pointer;
+  user-select: none;
+  opacity: 0.55;
+}
+
+.envelope-chip.on {
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--accent, #3d7a8c) 50%, var(--panel-border));
+}
+
+.envelope-chip input {
+  margin: 0;
+}
+
 .tour-card {
   background: var(--panel);
   border: 1px solid var(--panel-border);
