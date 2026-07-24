@@ -34,6 +34,12 @@ export function ControlsPanel() {
   const outletSideVisible =
     useViewerStore((s) => s.model.layers.find((l) => l.id === 'outletSide')?.visible) ??
     false
+  const masonryVisible =
+    useViewerStore((s) => s.model.layers.find((l) => l.id === 'masonry')?.visible) ?? true
+  const shellVisible =
+    useViewerStore((s) => s.model.layers.find((l) => l.id === 'shell')?.visible) ?? true
+  const chamberVisible =
+    useViewerStore((s) => s.model.layers.find((l) => l.id === 'chamber')?.visible) ?? true
   const setLayerVisible = useViewerStore((s) => s.setLayerVisible)
 
   return (
@@ -121,6 +127,36 @@ export function ControlsPanel() {
           </label>
         </>
       )}
+      <p className="muted" style={{ marginBottom: '0.25rem' }}>
+        Envolventes
+      </p>
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={masonryVisible}
+          onChange={(e) => setLayerVisible('masonry', e.target.checked)}
+        />
+        <span className="swatch" style={{ background: '#a67c52' }} />
+        1 · Chimenea
+      </label>
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={shellVisible}
+          onChange={(e) => setLayerVisible('shell', e.target.checked)}
+        />
+        <span className="swatch" style={{ background: '#3d7a8c' }} />
+        2 · Carcasa
+      </label>
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={chamberVisible}
+          onChange={(e) => setLayerVisible('chamber', e.target.checked)}
+        />
+        <span className="swatch" style={{ background: '#2a2e33' }} />
+        3 · Cámara
+      </label>
       <label className="field">
         Opacidad chimenea ({Math.round(masonryOpacity * 100)}%)
         <input
