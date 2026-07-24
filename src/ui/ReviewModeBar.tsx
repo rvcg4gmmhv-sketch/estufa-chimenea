@@ -5,6 +5,7 @@ const ENVELOPES = [
   { id: 'masonry', label: '1 · Chimenea', color: '#a67c52' },
   { id: 'shell', label: '2 · Carcasa', color: '#3d7a8c' },
   { id: 'chamber', label: '3 · Cámara', color: '#2a2e33' },
+  { id: 'lining', label: '4 · Refractario', color: '#b8956c' },
 ] as const
 
 export function ReviewModeBar() {
