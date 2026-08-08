@@ -490,6 +490,19 @@ button:disabled {
   font-weight: 600;
 }
 
+.flow-endpoint-label {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  user-select: none;
+  pointer-events: none;
+}
+
 .envelope-label {
   font-weight: 600;
   padding: 3px 8px;

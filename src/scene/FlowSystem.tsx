@@ -1,4 +1,4 @@
-import { Line } from '@react-three/drei'
+import { Html, Line } from '@react-three/drei'
 import { useFrame } from '@react-three/fiber'
 import { useMemo, useRef } from 'react'
 import * as THREE from 'three'
@@ -12,6 +12,13 @@ interface Props {
   explode: number
   animate: boolean
   activeCircuits: Array<Exclude<CircuitId, 'none'>> | 'all'
+}
+
+type Seg = {
+  points: THREE.Vector3[]
+  cold?: boolean
+  label?: string
+  labelAt?: 'start' | 'end'
 }
 
 function resolvePort(
@@ -53,48 +60,73 @@ function resolvePort(
   return null
 }
 
+/** Inserta un punto intermedio para curvas más legibles en tramos largos. */
+function withBend(a: THREE.Vector3, b: THREE.Vector3): THREE.Vector3[] {
+  const mid = a.clone().lerp(b, 0.5)
+  const dist = a.distanceTo(b)
+  if (dist < 12) return [a, b]
+  // Ligera curvatura hacia “fuera” del cassette (frente / pasillo)
+  const outward = new THREE.Vector3(
+    Math.sign(a.x + b.x) * Math.min(6, dist * 0.08),
+    Math.max(a.y, b.y) * 0.02,
+    Math.min(a.z, b.z) - dist * 0.06,
+  )
+  mid.add(outward)
+  return [a, mid, b]
+}
+
 function CircuitFlow({
   points,
   color,
   animate,
+  label,
+  labelAt,
 }: {
   points: THREE.Vector3[]
   color: string
   animate: boolean
+  label?: string
+  labelAt?: 'start' | 'end'
 }) {
   const curve = useMemo(() => {
     if (points.length < 2) return null
-    return new THREE.CatmullRomCurve3(points)
+    return new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.35)
   }, [points])
 
   const dots = useRef<THREE.Group>(null)
 
-  useFrame((_, dt) => {
+  useFrame(() => {
     if (!animate || !curve || !dots.current) return
+    const n = dots.current.children.length
     dots.current.children.forEach((child, i) => {
-      const speed = 0.08
-      const t = ((performance.now() * 0.001 * speed + i / dots.current!.children.length) % 1)
-      const p = curve.getPoint(t)
-      child.position.copy(p)
+      const speed = 0.07
+      const t = (performance.now() * 0.001 * speed + i / n) % 1
+      child.position.copy(curve.getPoint(t))
     })
-    void dt
   })
 
   if (!curve || points.length < 2) return null
 
-  const linePts = curve.getPoints(32)
+  const linePts = curve.getPoints(48)
+  const labelPos =
+    labelAt === 'start' ? points[0] : labelAt === 'end' ? points[points.length - 1] : null
 
   return (
     <group>
-      <Line points={linePts} color={color} lineWidth={2} transparent opacity={0.55} />
+      <Line points={linePts} color={color} lineWidth={2.5} transparent opacity={0.65} />
       <group ref={dots}>
-        {Array.from({ length: 6 }).map((_, i) => (
+        {Array.from({ length: 9 }).map((_, i) => (
           <mesh key={i}>
-            <sphereGeometry args={[1.1, 8, 8]} />
-            <meshBasicMaterial color={color} transparent opacity={0.9} />
+            <sphereGeometry args={[1.25, 8, 8]} />
+            <meshBasicMaterial color={color} transparent opacity={0.92} />
           </mesh>
         ))}
       </group>
+      {label && labelPos && (
+        <Html position={labelPos} center style={{ pointerEvents: 'none' }}>
+          <span className="flow-endpoint-label">{label}</span>
+        </Html>
+      )}
     </group>
   )
 }
@@ -112,6 +144,8 @@ export function FlowSystem({ model, explode, animate, activeCircuits }: Props) {
       return true
     }
 
+    const shellVisible = ownerVisible('shell')
+
     return circuits.map((circuit) => {
       const edges = model.flowEdges.filter(
         (e) =>
@@ -119,21 +153,63 @@ export function FlowSystem({ model, explode, animate, activeCircuits }: Props) {
           ownerVisible(e.from.ownerId) &&
           ownerVisible(e.to.ownerId),
       )
-      const segs: { points: THREE.Vector3[]; cold?: boolean }[] = []
+      const segs: Seg[] = []
       for (const edge of edges) {
         const a = resolvePort(model, edge.from.ownerId, edge.from.portId, explode)
         const b = resolvePort(model, edge.to.ownerId, edge.to.portId, explode)
-        if (a && b) {
+        if (!a || !b) continue
+
+        const cold =
+          circuit === 'heating' &&
+          (edge.id.startsWith('h_room_in') ||
+            edge.id === 'h_grille' ||
+            edge.id === 'h0' ||
+            edge.id === 'h1n' ||
+            edge.from.ownerId === 'grilleBottom')
+
+        const label =
+          edge.id === 'h_room_in'
+            ? '← Habitación (frío)'
+            : edge.id === 'h_room_out'
+              ? 'Habitación (caliente) →'
+              : edge.id === 'c_ext'
+                ? '← Pasillo / exterior'
+                : edge.id === 'h3_out'
+                  ? 'Pasillo →'
+                  : edge.id === 'g4'
+                    ? '↑ Chimenea'
+                    : undefined
+
+        const labelAt =
+          edge.id === 'h_room_in' || edge.id === 'c_ext'
+            ? 'start'
+            : edge.id === 'h_room_out' || edge.id === 'h3_out' || edge.id === 'g4'
+              ? 'end'
+              : undefined
+
+        segs.push({
+          points: withBend(a, b),
+          cold,
+          label,
+          labelAt,
+        })
+      }
+
+      // Sin camisa metálica: puente ventilador → rejilla caliente por el hueco conceptual
+      if (circuit === 'heating' && !shellVisible && ownerVisible('cleanFan') && ownerVisible('outletFront')) {
+        const fanOut = resolvePort(model, 'cleanFan', 'out', explode)
+        const topIn = resolvePort(model, 'outletFront', 'in', explode)
+        if (fanOut && topIn) {
+          const mid = fanOut.clone().lerp(topIn, 0.55)
+          mid.z += 10
+          mid.y += 8
           segs.push({
-            points: [a, b],
-            cold:
-              circuit === 'heating' &&
-              (edge.id === 'h0' ||
-                edge.from.ownerId === 'grilleBottom' ||
-                edge.id === 'h1n'),
+            points: [fanOut, mid, topIn],
+            cold: false,
           })
         }
       }
+
       const color =
         circuit === 'combustion'
           ? CIRCUIT_COLORS.combustion
@@ -153,6 +229,8 @@ export function FlowSystem({ model, explode, animate, activeCircuits }: Props) {
             points={seg.points}
             color={seg.cold ? CIRCUIT_COLORS.heatingCold : p.color}
             animate={animate}
+            label={seg.label}
+            labelAt={seg.labelAt}
           />
         )),
       )}

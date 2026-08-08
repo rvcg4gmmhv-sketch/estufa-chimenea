@@ -49,12 +49,12 @@ export function createDefaultLayers(): LayerDef[] {
     }),
     layer({
       id: 'frame',
-      name: 'Marco frontal exterior',
+      name: 'Placa frontal metálica',
       function:
-        'Remate visual entre cassette y chimenea. No cierra la cámara; integra rejillas y cierre superior del aire limpio.',
+        'Cierra herméticamente (conceptual) el hueco de la boca de la chimenea. Enmarca la puerta de la cámara y las rejillas; adosada al frente de la obra. El aire limpio entra/sale solo por las rejillas; la puerta sella solo la caja de fuego.',
       circuit: 'none',
       materialKey: 'steel',
-      explodeOffset: { x: 0, y: 0, z: -22 },
+      explodeOffset: { x: 0, y: 0, z: -18 },
     }),
     layer({
       id: 'hoodSeal',
@@ -103,10 +103,11 @@ export function createDefaultLayers(): LayerDef[] {
     layer({
       id: 'doorFrame',
       name: 'Marco de puerta (cámara)',
-      function: 'Marco propio unido a la cámara; junta hermética conceptual. No cierra contra la albañilería.',
+      function:
+        'Marco de la caja de fuego, encajado en el hueco de la placa frontal; junta hermética conceptual entre puerta y cámara (no contra la albañilería).',
       circuit: 'combustion',
       materialKey: 'steel',
-      explodeOffset: { x: 0, y: 0, z: -8 },
+      explodeOffset: { x: 0, y: 0, z: -6 },
     }),
     layer({
       id: 'door',
@@ -129,7 +130,8 @@ export function createDefaultLayers(): LayerDef[] {
       explodeOffset: { x: 0, y: 14, z: -12 },
       ports: [
         { id: 'in', role: 'in', local: { x: 0, y: 0, z: 0 }, label: 'Desde camisa' },
-        { id: 'out', role: 'out', local: { x: 0, y: 0, z: 0 }, label: 'A la habitación' },
+        { id: 'out', role: 'out', local: { x: 0, y: 0, z: 0 }, label: 'Boca a habitación' },
+        { id: 'room', role: 'out', local: { x: 0, y: 0, z: 0 }, label: 'Habitación' },
       ],
     }),
     layer({
@@ -140,7 +142,8 @@ export function createDefaultLayers(): LayerDef[] {
       materialKey: 'steel',
       explodeOffset: { x: 0, y: -12, z: -12 },
       ports: [
-        { id: 'in', role: 'in', local: { x: 0, y: 0, z: 0 }, label: 'Desde habitación' },
+        { id: 'room', role: 'in', local: { x: 0, y: 0, z: 0 }, label: 'Habitación' },
+        { id: 'in', role: 'in', local: { x: 0, y: 0, z: 0 }, label: 'Boca desde habitación' },
         { id: 'out', role: 'out', local: { x: 0, y: 0, z: 0 }, label: 'Al ventilador' },
       ],
     }),
@@ -389,7 +392,21 @@ export function createDefaultFlowEdges(): DesignModel['flowEdges'] {
       to: { ownerId: 'flue', portId: 'in' },
       label: 'Evacuación',
     },
-    // Calefacción
+    // Calefacción (habitación ↔ cassette)
+    {
+      id: 'h_room_in',
+      circuit: 'heating',
+      from: { ownerId: 'grilleBottom', portId: 'room' },
+      to: { ownerId: 'grilleBottom', portId: 'in' },
+      label: 'Habitación → rejilla fría',
+    },
+    {
+      id: 'h_grille',
+      circuit: 'heating',
+      from: { ownerId: 'grilleBottom', portId: 'in' },
+      to: { ownerId: 'grilleBottom', portId: 'out' },
+      label: 'Entrada por rejilla',
+    },
     {
       id: 'h0',
       circuit: 'heating',
@@ -419,11 +436,48 @@ export function createDefaultFlowEdges(): DesignModel['flowEdges'] {
       label: 'Camisa → rejilla superior',
     },
     {
+      id: 'h_grille_top',
+      circuit: 'heating',
+      from: { ownerId: 'outletFront', portId: 'in' },
+      to: { ownerId: 'outletFront', portId: 'out' },
+      label: 'Salida por rejilla caliente',
+    },
+    {
+      id: 'h_room_out',
+      circuit: 'heating',
+      from: { ownerId: 'outletFront', portId: 'out' },
+      to: { ownerId: 'outletFront', portId: 'room' },
+      label: 'Rejilla caliente → habitación',
+    },
+    {
       id: 'h3',
       circuit: 'heating',
       from: { ownerId: 'shell', portId: 'air_out_side' },
       to: { ownerId: 'outletSide', portId: 'in' },
       label: 'Salida pasillo',
+    },
+    {
+      id: 'h3_out',
+      circuit: 'heating',
+      from: { ownerId: 'outletSide', portId: 'in' },
+      to: { ownerId: 'outletSide', portId: 'out' },
+      label: 'Al pasillo',
+    },
+    // Combustión: desde exterior/pasillo
+    {
+      id: 'c_ext',
+      circuit: 'combustion',
+      from: { ownerId: 'exteriorIntake', portId: 'in' },
+      to: { ownerId: 'exteriorIntake', portId: 'out' },
+      label: 'Exterior / pasillo → toma',
+    },
+    // Gases: sube por el ducto
+    {
+      id: 'g4',
+      circuit: 'gases',
+      from: { ownerId: 'flue', portId: 'in' },
+      to: { ownerId: 'flue', portId: 'out' },
+      label: 'Salida a chimenea',
     },
   ]
 }

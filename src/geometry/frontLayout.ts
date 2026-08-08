@@ -30,6 +30,29 @@ export interface FrontLayout {
     length: number
   }
   plenum: { width: number; height: number; depth: number; y: number; z: number }
+  /**
+   * Placa frontal metálica: cierra la boca de la chimenea, enmarca la puerta
+   * de cámara y las rejillas; adosada al plano Z=0 de la obra.
+   */
+  facadePlate: {
+    /** Ancho total (boca + labio sobre albañilería) */
+    width: number
+    /** Alto total */
+    height: number
+    /** Centro Y de la placa */
+    cy: number
+    /** Cara habitación (Z negativo) */
+    zFace: number
+    /** Espesor de la placa */
+    thickness: number
+    /** Abertura de puerta (hueco en placa) */
+    doorCut: { width: number; height: number; cy: number }
+    /** Abertura rejilla superior */
+    grilleTopCut: { width: number; height: number; cy: number }
+    /** Abertura rejilla inferior */
+    grilleBottomCut: { width: number; height: number; cy: number }
+  }
+  /** @deprecated usar facadePlate */
   frameOuter: { width: number; height: number; z: number }
   /** En garganta, coaxial con el ducto — no en fachada */
   hoodSeal: { y: number; z: number; radius: number }
@@ -43,17 +66,30 @@ export function computeFrontLayout(
   const chamberW = chamberWidth(fp, fit)
   const chamberFrontZ = fit.frontSetback + CHAMBER_INSET
 
-  // Bandas frontales dentro de la boca (~55 cm)
+  // Bandas frontales dentro de la boca (~55 cm), alineadas a la placa
+  const lip = 3.5 // solapa sobre el frente de obra
+  const plateW = fp.frontWidth + lip * 2
+  const plateH = fp.frontHeight + lip * 2
+  const plateCy = fp.frontHeight / 2
+  const plateThickness = 2.2
+  const zFace = -1.8 // cara habitación, adosada a Z=0
+
   const grilleTopH = 5
   const grilleBottomH = 5.5
-  const gap = 1.2
-  const doorYBottom = fit.bottomClearance + grilleBottomH + gap + 1.5
-  const doorYTop = fp.frontHeight - fit.topClearance - grilleTopH - gap
-  const doorH = Math.max(22, doorYTop - doorYBottom)
-  const doorW = Math.min(chamberW * 0.88, fp.frontWidth * 0.62)
+  const band = 2.4 // montante entre aberturas
+  const sideRail = 5.5
 
-  const doorZFrame = chamberFrontZ - 0.4
-  const doorZLeaf = doorZFrame - 1.8
+  const grilleTopY = fp.frontHeight - fit.topClearance - grilleTopH / 2 - 0.4
+  const grilleBottomY = fit.bottomClearance + grilleBottomH / 2 + 0.4
+  const doorYBottom = grilleBottomY + grilleBottomH / 2 + band
+  const doorYTop = grilleTopY - grilleTopH / 2 - band
+  const doorH = Math.max(22, doorYTop - doorYBottom)
+  const doorW = Math.min(chamberW * 0.9, fp.frontWidth - sideRail * 2)
+  const grilleW = Math.min(doorW + 4, fp.frontWidth - sideRail * 2)
+
+  // Puerta enmarcada en la placa (casi coplanar con la fachada)
+  const doorZFrame = zFace + plateThickness * 0.35
+  const doorZLeaf = doorZFrame - 1.6
 
   return {
     chamberW,
@@ -68,16 +104,16 @@ export function computeFrontLayout(
       hingeX: -doorW / 2,
     },
     grilleTop: {
-      width: Math.min(fp.frontWidth * 0.7, chamberW + 8),
+      width: grilleW,
       height: grilleTopH,
-      y: fp.frontHeight - fit.topClearance - grilleTopH / 2 - 0.5,
-      z: -1.2,
+      y: grilleTopY,
+      z: zFace + 0.3,
     },
     grilleBottom: {
-      width: Math.min(fp.frontWidth * 0.7, chamberW + 8),
+      width: grilleW,
       height: grilleBottomH,
-      y: fit.bottomClearance + grilleBottomH / 2 + 0.3,
-      z: -1.2,
+      y: grilleBottomY,
+      z: zFace + 0.3,
     },
     fan: {
       width: chamberW * 0.75,
@@ -91,7 +127,6 @@ export function computeFrontLayout(
       const height = 5
       const depth = 10
       const y = fit.bottomClearance + 9
-      // Detrás del ventilador, bajo la cámara
       const z = chamberFrontZ + 18
       return { width, height, depth, y, z }
     })(),
@@ -111,13 +146,34 @@ export function computeFrontLayout(
         length: Math.abs(innerX - outerX),
       }
     })(),
+    facadePlate: {
+      width: plateW,
+      height: plateH,
+      cy: plateCy,
+      zFace,
+      thickness: plateThickness,
+      doorCut: {
+        width: doorW + 0.6,
+        height: doorH + 0.6,
+        cy: doorYBottom + doorH / 2,
+      },
+      grilleTopCut: {
+        width: grilleW + 0.4,
+        height: grilleTopH + 0.3,
+        cy: grilleTopY,
+      },
+      grilleBottomCut: {
+        width: grilleW + 0.4,
+        height: grilleBottomH + 0.3,
+        cy: grilleBottomY,
+      },
+    },
     frameOuter: {
-      width: fp.frontWidth + 8,
-      height: fp.frontHeight + 6,
-      z: -3.5,
+      width: plateW,
+      height: plateH,
+      z: zFace,
     },
     hoodSeal: {
-      // Coaxial con el conducto en la garganta (no con el marco frontal)
       y: fp.throatHeight - 8,
       z: fp.lintelDepth + fp.throatDepth / 2,
       radius: 8,

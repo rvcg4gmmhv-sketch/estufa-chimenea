@@ -50,17 +50,87 @@ export function buildLayerPart(layer: LayerDef, model: DesignModel): BuiltPart[]
     case 'masonry':
       return []
     case 'frame': {
-      const ow = fl.frameOuter.width
-      const oh = fl.frameOuter.height
-      const t = 3.5
-      const z = fl.frameOuter.z
-      const cy = fp.frontHeight / 2
-      return [
-        { geometry: new THREE.BoxGeometry(ow, t, 4), position: new THREE.Vector3(0, oh - t / 2 - 1, z) },
-        { geometry: new THREE.BoxGeometry(ow, t, 4), position: new THREE.Vector3(0, t / 2 - 1, z) },
-        { geometry: new THREE.BoxGeometry(t, oh - 2, 4), position: new THREE.Vector3(-ow / 2 + t / 2, cy, z) },
-        { geometry: new THREE.BoxGeometry(t, oh - 2, 4), position: new THREE.Vector3(ow / 2 - t / 2, cy, z) },
-      ]
+      // Placa frontal: cierra la boca de la obra, con huecos para puerta y rejillas
+      const p = fl.facadePlate
+      const z = p.zFace + p.thickness / 2
+      const zSeal = 0.15 // junta contra Z=0 de la albañilería
+      const left = -p.width / 2
+      const right = p.width / 2
+      const bottom = p.cy - p.height / 2
+      const top = p.cy + p.height / 2
+
+      const doorL = -p.doorCut.width / 2
+      const doorR = p.doorCut.width / 2
+      const doorB = p.doorCut.cy - p.doorCut.height / 2
+      const doorT = p.doorCut.cy + p.doorCut.height / 2
+
+      const gtL = -p.grilleTopCut.width / 2
+      const gtR = p.grilleTopCut.width / 2
+      const gtB = p.grilleTopCut.cy - p.grilleTopCut.height / 2
+      const gtT = p.grilleTopCut.cy + p.grilleTopCut.height / 2
+
+      const gbL = -p.grilleBottomCut.width / 2
+      const gbR = p.grilleBottomCut.width / 2
+      const gbB = p.grilleBottomCut.cy - p.grilleBottomCut.height / 2
+      const gbT = p.grilleBottomCut.cy + p.grilleBottomCut.height / 2
+
+      const th = p.thickness
+      const parts: BuiltPart[] = []
+
+      const panel = (w: number, h: number, x: number, y: number, depth = th, zz = z) => {
+        if (w < 0.3 || h < 0.3) return
+        parts.push({
+          geometry: new THREE.BoxGeometry(w, h, depth),
+          position: new THREE.Vector3(x, y, zz),
+          materialOverride: 'steel',
+        })
+      }
+
+      // Franja superior (sobre rejilla caliente)
+      panel(p.width, top - gtT, 0, (top + gtT) / 2)
+      // Franja entre rejilla caliente y puerta
+      panel(p.width, gtB - doorT, 0, (gtB + doorT) / 2)
+      // Franja entre puerta y rejilla fría
+      panel(p.width, doorB - gbT, 0, (doorB + gbT) / 2)
+      // Franja inferior (bajo rejilla fría)
+      panel(p.width, gbB - bottom, 0, (gbB + bottom) / 2)
+
+      // Laterales a la altura de cada abertura (cierran el hueco de la boca)
+      const midBand = (y0: number, y1: number, cutL: number, cutR: number) => {
+        const h = y1 - y0
+        const cy = (y0 + y1) / 2
+        panel(cutL - left, h, (left + cutL) / 2, cy)
+        panel(right - cutR, h, (cutR + right) / 2, cy)
+      }
+      midBand(gtB, gtT, gtL, gtR)
+      midBand(doorB, doorT, doorL, doorR)
+      midBand(gbB, gbT, gbL, gbR)
+
+      // Bisel / labio perimetral hacia la habitación (remate estético)
+      const lipD = 1.2
+      const lipZ = p.zFace - lipD / 2
+      const lipT = 1.4
+      panel(p.width + 0.4, lipT, 0, top + lipT / 2 - 0.2, lipD, lipZ)
+      panel(p.width + 0.4, lipT, 0, bottom - lipT / 2 + 0.2, lipD, lipZ)
+      panel(lipT, p.height - 0.4, left - lipT / 2 + 0.1, p.cy, lipD, lipZ)
+      panel(lipT, p.height - 0.4, right + lipT / 2 - 0.1, p.cy, lipD, lipZ)
+
+      // Junta hermética conceptual placa ↔ obra (cara posterior)
+      parts.push({
+        geometry: new THREE.BoxGeometry(fp.frontWidth + 1, fp.frontHeight + 1, 0.5),
+        position: new THREE.Vector3(0, fp.frontHeight / 2, zSeal),
+        materialOverride: 'seal',
+      })
+
+      // Marco embutido alrededor del hueco de puerta (adosado a la placa)
+      const reveal = 1.6
+      const rz = p.zFace + th * 0.15
+      panel(p.doorCut.width + reveal * 2, reveal, 0, doorT + reveal / 2, th * 0.7, rz)
+      panel(p.doorCut.width + reveal * 2, reveal, 0, doorB - reveal / 2, th * 0.7, rz)
+      panel(reveal, p.doorCut.height, doorL - reveal / 2, p.doorCut.cy, th * 0.7, rz)
+      panel(reveal, p.doorCut.height, doorR + reveal / 2, p.doorCut.cy, th * 0.7, rz)
+
+      return parts
     }
     case 'hoodSeal': {
       const geo = new THREE.TorusGeometry(fl.hoodSeal.radius, 1.8, 8, 20)
@@ -103,36 +173,67 @@ export function buildLayerPart(layer: LayerDef, model: DesignModel): BuiltPart[]
       ]
     }
     case 'doorFrame': {
+      // Marco en la placa + manguito hasta la cara de la cámara (cierra el hueco del aire limpio)
       const { door } = fl
-      const tw = 2.2
+      const tw = 1.8
+      const depth = 2.4
+      const z = door.zFrame
+      const cy = (door.yBottom + door.yTop) / 2
       const parts: BuiltPart[] = [
         {
-          geometry: new THREE.BoxGeometry(door.width + tw * 2, tw, 2),
-          position: new THREE.Vector3(0, door.yTop + tw / 2, door.zFrame),
+          geometry: new THREE.BoxGeometry(door.width + tw * 2, tw, depth),
+          position: new THREE.Vector3(0, door.yTop + tw / 2, z),
           materialOverride: 'steel',
         },
         {
-          geometry: new THREE.BoxGeometry(door.width + tw * 2, tw, 2),
-          position: new THREE.Vector3(0, door.yBottom - tw / 2, door.zFrame),
+          geometry: new THREE.BoxGeometry(door.width + tw * 2, tw, depth),
+          position: new THREE.Vector3(0, door.yBottom - tw / 2, z),
           materialOverride: 'steel',
         },
         {
-          geometry: new THREE.BoxGeometry(tw, door.height, 2),
-          position: new THREE.Vector3(-door.width / 2 - tw / 2, (door.yBottom + door.yTop) / 2, door.zFrame),
+          geometry: new THREE.BoxGeometry(tw, door.height, depth),
+          position: new THREE.Vector3(-door.width / 2 - tw / 2, cy, z),
           materialOverride: 'steel',
         },
         {
-          geometry: new THREE.BoxGeometry(tw, door.height, 2),
-          position: new THREE.Vector3(door.width / 2 + tw / 2, (door.yBottom + door.yTop) / 2, door.zFrame),
+          geometry: new THREE.BoxGeometry(tw, door.height, depth),
+          position: new THREE.Vector3(door.width / 2 + tw / 2, cy, z),
           materialOverride: 'steel',
         },
-        // Junta hermética conceptual (anillo fino)
+        // Junta hermética puerta ↔ marco
         {
-          geometry: new THREE.BoxGeometry(door.width + 1, door.height + 1, 0.4),
-          position: new THREE.Vector3(0, (door.yBottom + door.yTop) / 2, door.zFrame - 0.8),
+          geometry: new THREE.BoxGeometry(door.width + 0.8, door.height + 0.8, 0.35),
+          position: new THREE.Vector3(0, cy, door.zLeaf + 0.9),
           materialOverride: 'seal',
         },
       ]
+      // Túnel estanco placa → cámara (evita que el aire limpio escape por la abertura)
+      const tunnelEnd = fl.chamberFrontZ + 0.5
+      const tunnelLen = Math.max(4, tunnelEnd - z)
+      const tunnelZ = z + tunnelLen / 2
+      const tw2 = 1.4
+      parts.push(
+        {
+          geometry: new THREE.BoxGeometry(door.width + tw2 * 2, tw2, tunnelLen),
+          position: new THREE.Vector3(0, door.yTop + tw2 / 2, tunnelZ),
+          materialOverride: 'steel',
+        },
+        {
+          geometry: new THREE.BoxGeometry(door.width + tw2 * 2, tw2, tunnelLen),
+          position: new THREE.Vector3(0, door.yBottom - tw2 / 2, tunnelZ),
+          materialOverride: 'steel',
+        },
+        {
+          geometry: new THREE.BoxGeometry(tw2, door.height, tunnelLen),
+          position: new THREE.Vector3(-door.width / 2 - tw2 / 2, cy, tunnelZ),
+          materialOverride: 'steel',
+        },
+        {
+          geometry: new THREE.BoxGeometry(tw2, door.height, tunnelLen),
+          position: new THREE.Vector3(door.width / 2 + tw2 / 2, cy, tunnelZ),
+          materialOverride: 'steel',
+        },
+      )
       return parts
     }
     case 'door': {
@@ -405,8 +506,10 @@ export function layerPortWorld(
 
   switch (layer.id) {
     case 'grilleBottom':
-      map.in = new THREE.Vector3(0, fl.grilleBottom.y, fl.grilleBottom.z - 3)
-      map.out = new THREE.Vector3(0, fl.grilleBottom.y, fl.fan.z - fl.fan.depth / 2)
+      // Habitación (Z negativo) → boca de rejilla → hacia el ventilador
+      map.room = new THREE.Vector3(0, fl.grilleBottom.y - 1, -36)
+      map.in = new THREE.Vector3(0, fl.grilleBottom.y, -16)
+      map.out = new THREE.Vector3(0, fl.grilleBottom.y, fl.fan.z - fl.fan.depth / 2 - 1)
       return map
     case 'cleanFan':
       map.in = new THREE.Vector3(0, fl.fan.y, fl.fan.z - fl.fan.depth / 2)
@@ -414,8 +517,10 @@ export function layerPortWorld(
       map.bypass = new THREE.Vector3(0, fl.fan.y + 3, fl.fan.z + 2)
       return map
     case 'outletFront':
-      map.in = new THREE.Vector3(0, fl.grilleTop.y, fl.grilleTop.z + 4)
-      map.out = new THREE.Vector3(0, fl.grilleTop.y, fl.grilleTop.z - 4)
+      // Desde camisa → rejilla → habitación
+      map.in = new THREE.Vector3(0, fl.grilleTop.y, fl.grilleTop.z + 5)
+      map.out = new THREE.Vector3(0, fl.grilleTop.y, -10)
+      map.room = new THREE.Vector3(0, fl.grilleTop.y + 2, -36)
       return map
     case 'shell': {
       map.air_in_bottom = new THREE.Vector3(0, fl.fan.y + 4, fl.fan.z + fl.fan.depth / 2 + 2)
@@ -425,9 +530,15 @@ export function layerPortWorld(
       return map
     }
     case 'exteriorIntake':
-      map.in = new THREE.Vector3(fl.exteriorIntake.outerX, fl.exteriorIntake.y, fl.exteriorIntake.z)
+      // Extiende hacia el pasillo (X negativo) antes de entrar al cassette
+      map.in = new THREE.Vector3(fl.exteriorIntake.outerX - 16, fl.exteriorIntake.y, fl.exteriorIntake.z)
       map.out = new THREE.Vector3(fl.exteriorIntake.innerX, fl.exteriorIntake.y, fl.exteriorIntake.z)
       return map
+    case 'flue': {
+      map.in = new THREE.Vector3(0, fl.hoodSeal.y - 8, fl.hoodSeal.z)
+      map.out = new THREE.Vector3(0, fl.hoodSeal.y + 36, fl.hoodSeal.z)
+      return map
+    }
     case 'plenum': {
       const p = fl.plenum
       map.ext_in = new THREE.Vector3(-p.width / 2, p.y, p.z)
@@ -483,7 +594,7 @@ export function layerPortWorld(
       const parts = buildLayerPart(layer, model)
       const base = partWorldBase(parts[0]!)
       map.in = base.clone().add(new THREE.Vector3(-4, 0, 0))
-      map.out = base.clone().add(new THREE.Vector3(6, 0, 0))
+      map.out = base.clone().add(new THREE.Vector3(22, 0, 0))
       return map
     }
     default: {
